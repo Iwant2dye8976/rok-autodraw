@@ -2,6 +2,8 @@
 <html>
 
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     * {
       box-sizing: border-box;
@@ -57,7 +59,6 @@
       min-height: 16px;
     }
 
-    /* Characters table */
     #charSection {
       margin-bottom: 10px;
     }
@@ -137,7 +138,6 @@
       color: #c0392b;
     }
 
-    /* Schedule info */
     #scheduleBox {
       background: #fff;
       border: 1px solid #e0e0e0;
@@ -153,7 +153,6 @@
       display: block;
     }
 
-    /* Token box */
     #tokenSection {
       margin-bottom: 10px;
     }
@@ -179,7 +178,6 @@
       color: #555;
     }
 
-    /* Log */
     #log {
       font-size: 12px;
       max-height: 160px;
@@ -196,42 +194,184 @@
     #log.visible {
       display: block;
     }
+
+    #detailView {
+      animation: slideIn 0.18s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(18px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .back-btn {
+      flex: 0 0 auto;
+      padding: 6px 10px;
+      font-size: 12px;
+      background: #eee;
+      color: #333;
+      border-radius: 6px;
+    }
+
+    .back-btn:hover {
+      background: #ddd;
+    }
+
+    .detail-char-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .detail-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #ccc;
+    }
+
+    .detail-char-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #222;
+    }
+
+    .detail-char-svr {
+      font-size: 11px;
+      color: #999;
+    }
+
+    .detail-section-label {
+      font-size: 11px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+
+    .history-list {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      overflow: hidden;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .history-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #f2f2f2;
+      font-size: 12px;
+    }
+
+    .history-row:last-child {
+      border-bottom: none;
+    }
+
+    .history-index {
+      color: #262323;
+      font-size: 13px;
+      width: 22px;
+      flex-shrink: 0;
+    }
+
+    .reward-img {
+      width: 45px;
+      height: 45px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .history-reward {
+      flex: 1;
+      font-size: 13px;
+      font-weight: bold;
+      color: #262323;
+    }
+
+    .history-time {
+      font-size: 13px;
+      color: #262323;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .history-empty {
+      padding: 14px 12px;
+      color: #bbb;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .history-loading {
+      color: #856404;
+    }
+
+    .history-err {
+      color: #c0392b;
+    }
+
+    .char-history {
+      color: #2e6b1f;
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .char-history:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 
 <body>
-
   <h3>Lilith Auto Draw</h3>
-
-  <div class="btn-row">
-    <button id="captureBtn">Capture Token</button>
-    <button id="refreshCharsBtn">Refresh</button>
-  </div>
-
-  <div class="btn-row">
-    <button id="drawNowBtn">Draw Now</button>
-    <button id="scheduleBtn">Schedule</button>
-  </div>
-
-  <div id="status">Open https://www.plutomall.com.vn/rok/vn?tab=perks first</div>
-
-  <div id="charSection">
-    <h4>Characters</h4>
-    <div id="charList">
-      <div class="char-row"><span style="color:#aaa;font-size:12px">No token yet</span></div>
+  <div id="main">
+    <div class="btn-row">
+      <button id="captureBtn">Capture Token</button>
+      <button id="refreshCharsBtn">Refresh</button>
     </div>
+
+    <div class="btn-row">
+      <button id="drawNowBtn">Draw Now</button>
+      <button id="scheduleBtn">Schedule</button>
+    </div>
+
+    <div id="status">Open https://www.plutomall.com.vn/rok/vn?tab=perks first</div>
+
+    <div id="charSection">
+      <h4>Characters</h4>
+      <div id="charList">
+        <div class="char-row"><span style="color:#aaa;font-size:12px">No token yet</span></div>
+      </div>
+    </div>
+
+    <div id="scheduleBox"></div>
+
+    <div id="tokenSection">
+      <h4>Token</h4>
+      <textarea id="tokenBox" readonly rows="20" cols="10"></textarea>
+    </div>
+
+    <div id="log"></div>
   </div>
-
-  <div id="scheduleBox"></div>
-
-  <div id="tokenSection">
-    <h4>Token</h4>
-    <textarea id="tokenBox" readonly rows="20" cols="10"></textarea>
-  </div>
-
-  <div id="log"></div>
-
   <script src="popup.js"></script>
 </body>
-
-</html>

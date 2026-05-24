@@ -8,8 +8,7 @@
     "scripting",
     "activeTab",
     "webRequest",
-    "webRequestAuthProvider",
-    "webNavigation"
+    "webRequestAuthProvider"
   ],
   "host_permissions": [
     "https://*.lilithgame.com/*",
