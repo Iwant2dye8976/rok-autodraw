@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Lilith Auto Draw",
+  "version": "1.0",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab",
+    "webRequest",
+    "webRequestAuthProvider"
+  ],
+  "host_permissions": [
+    "https://*.lilithgame.com/*",
+    "https://*.plutomall.com/*",
+    "https://*.plutomall.com.vn/*",
+    "https://campaign-global.lilith.com/*",
+    "https://plat-campaign-api.lilithgame.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://plat-campaign-api.lilithgame.com/*",
+        "https://campaign-global.lilith.com/*",
+        "https://www.plutomall.com.vn/*",
+        "https://*.lilithgame.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://plat-campaign-api.lilithgame.com/*",
+        "https://campaign-global.lilith.com/*",
+        "https://www.plutomall.com.vn/*",
+        "https://*.lilithgame.com/*"
+      ],
+      "js": [
+        "content-bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": true
+    }
+  ]
+}

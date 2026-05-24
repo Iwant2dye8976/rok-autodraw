@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 360px;
+      padding: 14px;
+      font-family: sans-serif;
+      background: #f9f9f9;
+      color: #222;
+    }
+
+    h3 {
+      font-size: 15px;
+      margin-bottom: 12px;
+      color: #2e6b1f;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    button {
+      flex: 1;
+      padding: 9px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      background: #669D5A;
+      color: white;
+      transition: background 0.15s;
+    }
+
+    button:hover {
+      background: #558a4a;
+    }
+
+    button:disabled {
+      background: #aaa;
+      cursor: default;
+    }
+
+    #status {
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 10px;
+      min-height: 16px;
+    }
+
+    /* Characters table */
+    #charSection {
+      margin-bottom: 10px;
+    }
+
+    #charSection h4 {
+      font-size: 12px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    #charList {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .char-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      font-size: 13px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .char-row:last-child {
+      border-bottom: none;
+    }
+
+    .char-name {
+      font-weight: 500;
+    }
+
+    .char-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #444;
+      overflow: hidden;
+    }
+
+    .char-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .draw-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .draw-available {
+      background: #e6f4e1;
+      color: #2e6b1f;
+    }
+
+    .draw-none {
+      background: #f0f0f0;
+      color: #999;
+    }
+
+    .draw-loading {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .draw-error {
+      background: #fde8e8;
+      color: #c0392b;
+    }
+
+    /* Schedule info */
+    #scheduleBox {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.8;
+      margin-bottom: 10px;
+      display: none;
+    }
+
+    #scheduleBox.visible {
+      display: block;
+    }
+
+    /* Token box */
+    #tokenSection {
+      margin-bottom: 10px;
+    }
+
+    #tokenSection h4 {
+      font-size: 12px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 52px;
+      resize: none;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 11px;
+      background: #fff;
+      word-break: break-all;
+      color: #555;
+    }
+
+    /* Log */
+    #log {
+      font-size: 12px;
+      max-height: 160px;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      display: none;
+      color: #333;
+    }
+
+    #log.visible {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h3>Lilith Auto Draw</h3>
+
+  <div class="btn-row">
+    <button id="captureBtn">Capture Token</button>
+    <button id="refreshCharsBtn">Refresh</button>
+  </div>
+
+  <div class="btn-row">
+    <button id="drawNowBtn">Draw Now</button>
+    <button id="scheduleBtn">Schedule</button>
+  </div>
+
+  <div id="status">Open https://www.plutomall.com.vn/rok/vn?tab=perks first</div>
+
+  <div id="charSection">
+    <h4>Characters</h4>
+    <div id="charList">
+      <div class="char-row"><span style="color:#aaa;font-size:12px">No token yet</span></div>
+    </div>
+  </div>
+
+  <div id="scheduleBox"></div>
+
+  <div id="tokenSection">
+    <h4>Token</h4>
+    <textarea id="tokenBox" readonly rows="20" cols="10"></textarea>
+  </div>
+
+  <div id="log"></div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>
