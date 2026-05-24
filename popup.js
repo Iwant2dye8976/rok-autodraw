@@ -118,13 +118,22 @@ async function refresh() {
 }
 
 document.getElementById("captureBtn").addEventListener("click", async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await chrome.tabs.query({ url: "*://www.plutomall.com.vn/rok/vn*" });
   if (!tab?.url?.includes("plutomall.com.vn/rok/vn")) {
-    statusEl.textContent = "Open the campaign page first";
-    return;
+    return new Promise((resolve) => {
+      chrome.tabs.create({ url: "https://www.plutomall.com.vn/rok/vn?tab=perks", active: true }, (tab) => {
+        chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
+          if (tabId === tab.id && info.status === "complete") {
+            chrome.tabs.onUpdated.removeListener(listener);
+            console.log("Campaign tab loaded:", tabId);
+            resolve(tab.id);
+          }
+        });
+      });
+    });
   }
-  statusEl.textContent = "Reloading page...";
   chrome.tabs.reload(tab.id);
+  chrome.tabs.update(tab.id, { active: true });
 });
 
 document.getElementById("refreshCharsBtn").addEventListener("click", () => {
@@ -157,7 +166,7 @@ document.getElementById("drawNowBtn").addEventListener("click", () => {
           clearInterval(poll);
           btn.disabled = false;
           btn.textContent = "Draw Now";
-          loadCharacters(); 
+          loadCharacters();
         }
       }
     }, 1000);
