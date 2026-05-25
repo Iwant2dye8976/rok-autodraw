@@ -84,31 +84,16 @@ chrome.webRequest.onSendHeaders.addListener(
     ["requestHeaders", "extraHeaders"]
 );
 
-function getDelayUntilDraw() {
+async function autoDraw() {
     const now = new Date();
     const dayUTC = now.getUTCDay(); // 0=Sun, 5=Fri
-
-    // Days until NEXT Friday (if today is Friday, go to next Friday = 7 days)
-    let daysUntilFriday = (5 - dayUTC + 7) % 7;
-    if (daysUntilFriday === 0) {
-        daysUntilFriday = 7; // Today is Friday — schedule for NEXT Friday
+    if (dayUTC === 5) {
+        const token = await getToken();
+        if(token) {
+            const log = await runDraws();
+            chrome.storage.local.set({ drawLog: log });
+        }   
     }
-
-    const nextFriday = new Date(now);
-    nextFriday.setUTCDate(now.getUTCDate() + daysUntilFriday);
-    nextFriday.setUTCHours(0, 0, 0, 0);
-
-    const msUntilFriday = Math.max(0, nextFriday - now);
-    const randomOffsetMs = Math.random() * 8 * 60 * 60 * 1000;
-    const totalMs = msUntilFriday + randomOffsetMs;
-
-    const resetIn = (msUntilFriday / 1000 / 60 / 60).toFixed(2);
-    const offsetHours = (randomOffsetMs / 1000 / 60 / 60).toFixed(2);
-    const drawAt = new Date(Date.now() + totalMs);
-
-    console.log(`Reset in: ${resetIn}h | Offset: ${offsetHours}h | Draw at: ${drawAt.toLocaleString()}`);
-
-    return { totalMs, resetIn, offsetHours, nextFriday, drawAt };
 }
 
 
@@ -272,12 +257,6 @@ async function runDraws(token) {
                 const rewardId = result?.data?.rewardId;
                 const reward = REWARDS[rewardId] || result?.data?.reward || "Unknown";
                 log.push(`[${role.name}] x1 ${reward}`);
-
-                // Save reward name locally so history view can show it
-                const key = `rewardHistory_${role.roleId}`;
-                const { [key]: existing } = await chrome.storage.local.get(key);
-                const entry = { timestamp: Math.floor(Date.now() / 1000), reward };
-                await chrome.storage.local.set({ [key]: [entry, ...(existing || [])].slice(0, 50) });
             } catch (e) {
                 log.push(`[${role.name}] Error: ${e.message}`);
             }
@@ -290,64 +269,14 @@ async function runDraws(token) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.action === "schedule") {
-        (async () => {
-            const campaignToken = await getToken();
-            if (!campaignToken) {
-                sendResponse({ error: "No token — open the campaign page first!" });
-                return;
-            }
-            const { totalMs, resetIn, offsetHours, nextFriday, drawAt } = getDelayUntilDraw();
-
-            const info = {
-                nextReset: nextFriday.toUTCString(),
-                drawAt: drawAt.toLocaleString(),
-                resetIn: `${resetIn}h`,
-                randomOffset: `${offsetHours}h`
-            };
-
-            chrome.storage.local.set({ scheduleInfo: info, drawLog: [] });
-            sendResponse({ info });
-            try {
-                let anyDrawsNow = false;
-                if (anyDrawsNow) {
-                    log_update(["Draws available now — drawing immediately!"]);
-                    const immediateLog = await runDraws(campaignToken);
-                    chrome.storage.local.set({ drawLog: immediateLog });
-                }
-            } catch (e) {
-                console.log("Pre-schedule draw check failed:", e.message);
-            }
-
-            await new Promise(r => setTimeout(r, totalMs));
-
-
-            log_update(["Opening campaign tab to refresh token..."]);
-            let freshToken = campaignToken;
-            try {
-                const tabId = await openCampaignTab();
-
-                await new Promise(r => setTimeout(r, 5000));
-                freshToken = await waitForFreshToken(15000) || campaignToken;
-                await closeCampaignTab(tabId);
-            } catch (e) {
-                console.error("Tab open failed, using cached token:", e);
-            }
-
-            const log = await runDraws(freshToken);
-            chrome.storage.local.set({ drawLog: log });
-        })();
-        return true;
-    }
-
-    if (msg.action === "testDraw") {
+    if (msg.action === "drawNow") {
         (async () => {
             const campaignToken = await getToken();
             if (!campaignToken) {
                 sendResponse({ error: "No token in storage. Open the campaign page first." });
                 return;
             }
-            chrome.storage.local.set({ drawLog: ["Starting test draw..."] });
+            chrome.storage.local.set({ drawLog: ["Start drawing..."] });
             sendResponse({ ok: true });
             const log = await runDraws(campaignToken);
             chrome.storage.local.set({ drawLog: log });
@@ -360,7 +289,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             const token = await getToken();
             if (!token) { sendResponse({ error: "No token" }); return; }
             try {
-                const stored = await chrome.storage.local.get(["appId", "appUid"]);
                 const roles = await getRoles(token);
                 sendResponse({ roles })
             } catch (e) {

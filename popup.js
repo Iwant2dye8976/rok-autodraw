@@ -1,14 +1,25 @@
-const statusEl = document.getElementById("status");
-const logEl = document.getElementById("log");
-const tokenBox = document.getElementById("tokenBox");
-const charList = document.getElementById("charList");
-const schedBox = document.getElementById("scheduleBox");
+const statusEl  = document.getElementById("status");
+const statusDot = document.getElementById("statusDot");
+const logEl     = document.getElementById("log");
+const logWrap   = document.getElementById("logWrap");
+const tokenBox  = document.getElementById("tokenBox");
+const charList  = document.getElementById("charList");
+
+function setStatus(text, live = false) {
+  statusEl.textContent = text;
+  if (statusDot) statusDot.className = "status-dot" + (live ? " live" : "");
+}
+
+function showLog() {
+  if (logWrap) logWrap.style.display = "";
+  logEl.classList.add("visible");
+}
 
 function showMain() {
-  document.getElementById("charSection").style.display = "";
   const detailView = document.getElementById("detailView");
   if (detailView) detailView.remove();
   document.getElementById("main").style.display = "";
+  refresh();
   loadCharacters();
 }
 
@@ -59,29 +70,36 @@ function showHistory(character, history) {
       : "";
     return `
           <div class="history-row">
-            <span class="history-index">#${i + 1}</span>
-            <img class="reward-img" src="reward_images/${rewardImg}.png" onerror="this.style.display='none'">
-            <span class="history-reward">${reward} x${h.num || 1}</span>
-            ${date ? `<span class="history-time">${date}</span>` : ""}
+            <span class="h-idx">${i + 1}</span>
+            <img class="reward-img" src="images/rewards/${rewardImg}.png" onerror="this.style.display='none'">
+            <span class="h-reward">${reward} x${h.num || 1}</span>
+            ${date ? `<span class="h-time">${date}</span>` : ""}
           </div>`;
   }).join("");
 
   const div = document.createElement("div");
   div.id = "detailView";
   div.innerHTML = `
-    <div class="detail-header">
-      <button id="backBtn" class="back-btn">← Back</button>
-      <div class="detail-char-info">
-        <img class="detail-avatar" src="${character.avatar}" onerror="this.style.display='none'">
-        <div>
-          <div class="detail-char-name">${character.name}</div>
-          <div class="detail-char-svr">#${character.svrId}</div>
+    <nav class="detail-nav">
+      <button id="backBtn" class="back-btn">‹ Quay lại</button>
+      <span class="detail-nav-title">Lịch sử quay</span>
+    </nav>
+    <div class="content">
+      <div class="char-hero-card glass">
+        <div class="char-hero-inner">
+          <img class="hero-avatar" src="${character.avatar}" onerror="this.style.display='none'">
+          <div>
+            <div class="hero-name">${character.name}</div>
+            <div class="hero-svr">Server #${character.svrId}</div>
+          </div>
         </div>
       </div>
-    </div >
-    <div class="detail-section-label">Prize History</div>
-    <div class="history-list">
-      ${historyRows}
+      <div class="history-card glass">
+        <div class="history-card-head">Phần thưởng đã nhận</div>
+        <div class="history-list">
+          ${historyRows}
+        </div>
+      </div>
     </div>
   `;
 
@@ -139,30 +157,16 @@ async function loadCharacters() {
 
 async function refresh() {
   const data = await chrome.storage.local.get([
-    "campaignToken", "scheduleInfo", "drawLog", "cachedCharacters"
+    "campaignToken", "drawLog", "cachedCharacters"
   ]);
 
-  tokenBox.value = data.campaignToken;
+  tokenBox.value = data.campaignToken ?? "";
   if (data.campaignToken) {
-    statusEl.textContent = "Token captured";
-  }
-
-  // if (data.cachedCharacters) {
-  //   renderChars(data.cachedCharacters);
-  // }
-
-  if (data.scheduleInfo) {
-    schedBox.classList.add("visible");
-    schedBox.innerHTML = `
-    < b > Scheduled</b > <br>
-      Draw at: <b>${data.scheduleInfo.drawAt}</b><br>
-        Reset: ${data.scheduleInfo.nextReset}<br>
-          Offset: +${data.scheduleInfo.randomOffset}
-          `;
+    setStatus("Token OK", true);
   }
 
   if (data.drawLog?.length) {
-    logEl.classList.add("visible");
+    showLog();
     logEl.textContent = data.drawLog.join("\n");
     logEl.scrollTop = logEl.scrollHeight;
   }
@@ -184,27 +188,27 @@ document.getElementById("captureBtn").addEventListener("click", async () => {
     });
   }
   chrome.tabs.reload(tab.id);
-  chrome.tabs.update(tab.id, { active: true });
+  chrome.tabs.update(tab.id, { active: true , url: "https://www.plutomall.com.vn/rok/vn?tab=perks"});
 });
 
 document.getElementById("refreshCharsBtn").addEventListener("click", () => {
-  statusEl.textContent = "Refreshing characters...";
+  setStatus("Đang làm mới…");
+  refresh();
   loadCharacters();
-  statusEl.textContent = "Token captured";
 });
 
 document.getElementById("drawNowBtn").addEventListener("click", () => {
   const btn = document.getElementById("drawNowBtn");
   btn.disabled = true;
-  btn.textContent = "Drawing...";
-  logEl.classList.add("visible");
-  logEl.textContent = "Starting draw...";
+  btn.textContent = "Đang quay…";
+  showLog();
+  logEl.textContent = "Bắt đầu quay thưởng...";
 
-  chrome.runtime.sendMessage({ action: "testDraw" }, (res) => {
+  chrome.runtime.sendMessage({ action: "drawNow" }, (res) => {
     if (res?.error) {
-      statusEl.textContent = res.error;
+      setStatus(res.error);
       btn.disabled = false;
-      btn.textContent = "Draw Now";
+      btn.textContent = "✦ Quay thưởng ngay";
       return;
     }
 
@@ -216,22 +220,13 @@ document.getElementById("drawNowBtn").addEventListener("click", () => {
         if (drawLog[drawLog.length - 1] === "Done!") {
           clearInterval(poll);
           btn.disabled = false;
-          btn.textContent = "Draw Now";
+          btn.textContent = "✦ Quay thưởng ngay";
+          setStatus("Token OK", true);
+          refresh();
           loadCharacters();
         }
       }
     }, 1000);
-  });
-});
-
-document.getElementById("scheduleBtn").addEventListener("click", () => {
-  chrome.runtime.sendMessage({ action: "schedule" }, (res) => {
-    if (res?.error) {
-      statusEl.textContent = res.error;
-      return;
-    }
-    statusEl.textContent = "Scheduled!";
-    refresh();
   });
 });
 
@@ -260,17 +255,24 @@ function showHistoryLoading(name) {
   const div = document.createElement("div");
   div.id = "detailView";
   div.innerHTML = `
-          <div class="detail-header">
-            <button id="backBtn" class="back-btn">← Back</button>
-            <div class="detail-char-info">
-              <div class="detail-char-name">${name}</div>
-            </div>
-          </div>
-          <div class="detail-section-label">Prize History</div>
-          <div class="history-list">
-            <div class="history-empty history-loading">Loading history\u2026</div>
-          </div>
-          `;
+    <nav class="detail-nav">
+      <button id="backBtn" class="back-btn">‹ Quay lại</button>
+      <span class="detail-nav-title">Lịch sử quay</span>
+    </nav>
+    <div class="content">
+      <div class="char-hero-card glass">
+        <div class="char-hero-inner">
+          <div class="hero-name">${name}</div>
+        </div>
+      </div>
+      <div class="history-card glass">
+        <div class="history-card-head">Phần thưởng đã nhận</div>
+        <div class="history-list">
+          <div class="history-empty history-loading">Đang tải…</div>
+        </div>
+      </div>
+    </div>
+  `;
   const main = document.getElementById("main");
   main.parentNode.insertBefore(div, main.nextSibling);
   document.getElementById("backBtn").addEventListener("click", showMain);
