@@ -120,8 +120,8 @@ async function waitForFreshToken(timeoutMs = 15000) {
 async function getRoles(token) {
     const { appUid, appUidTemp } = await chrome.storage.local.get(["appUid", "appUidTemp"]);
     const cachedCharacters = await chrome.storage.local.get("cachedCharacters");
-    if (cachedCharacters?.length > 0 && appUid === appUidTemp) {
-        return cachedCharacters;
+    if (cachedCharacters.cachedCharacters?.length > 0 && appUid === appUidTemp) {
+        return cachedCharacters.cachedCharacters;
     }
     else if (appUid !== appUidTemp) {
         await chrome.storage.local.set({ cachedCharacters: [], appUidTemp: appUid });
@@ -143,9 +143,10 @@ async function getRoles(token) {
 }
 
 async function getCharacterById(token, roleId) {
-    const { cachedCharacters } = await chrome.storage.local.get("cachedCharacters");
-    if (cachedCharacters?.length > 0) {
-        const character = cachedCharacters.find(r => String(r.roleId) === String(roleId));
+    const cachedCharacters = await chrome.storage.local.get("cachedCharacters");
+    if (cachedCharacters.cachedCharacters?.length > 0) {
+        console.log("Searching character in cache for roleId:", roleId);
+        const character = cachedCharacters.cachedCharacters?.find(r => String(r.roleId) === String(roleId));
         if (character) return character;
     }
     const characters = await getRoles(token);

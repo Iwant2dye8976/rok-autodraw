@@ -224,20 +224,18 @@ document.getElementById("drawNowBtn").addEventListener("click", () => {
     }
 
     const poll = setInterval(async () => {
-      const { drawLog } = await chrome.storage.local.get("drawLog");
-      if (drawLog?.length) {
-        logEl.textContent = drawLog.join("\n");
+      const data = await chrome.storage.local.get("drawLog");
+      if (data.drawLog?.length > 0) {
+        logEl.textContent = data.drawLog.join("\n");
         logEl.scrollTop = logEl.scrollHeight;
-        if (drawLog[drawLog.length - 1] === "Done!") {
           clearInterval(poll);
           btn.disabled = false;
           btn.textContent = "✦ Quay thưởng ngay";
           setStatus("Token OK", true);
           refresh();
           loadCharacters();
-        }
       }
-    }, 1000);
+    }, 5000);
   });
 });
 
