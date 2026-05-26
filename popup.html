@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="popup.css">
   <title>Lilith Auto Draw</title>
 </head>
+
 <body>
   <nav class="g-nav">
     <span class="g-nav-brand">Lilith Auto Draw</span>
@@ -32,7 +34,10 @@
 
     <div class="card glass">
       <div class="card-head">
-        <div class="eyebrow">Nhân vật</div>
+        <div class="eyebrow-row">
+          <div class="eyebrow">Nhân vật</div>
+          <span class="draws-remaining" id="drawsRemaining">— lượt còn lại</span>
+        </div>
       </div>
       <div class="card-body">
         <div class="char-list-inner" id="charList">
@@ -60,4 +65,5 @@
 
   <script src="popup.js"></script>
 </body>
+
 </html>

@@ -28,29 +28,8 @@ async function getToken() {
     return null;
 }
 
-// chrome.webRequest.onSendHeaders.addListener(
-//     (details) => {
-//         const authHeader = details.requestHeaders?.find(
-//             h => h.name.toLowerCase() === "authorization"
-//         );
-//         if (authHeader?.value) {
-//             const token = authHeader.value;
-//             chrome.storage.local.set({ campaignToken: token, tokenTimestamp: Date.now() });
-//             console.log("Token captured via webRequest:", token.substring(0, 40));
-//         }
-
-//     },
-//     {
-//         urls: [
-//             "https://plat-campaign-api.lilithgame.com/*",
-//             "https://campaign-global.lilith.com/*"
-//         ]
-//     },
-//     ["requestHeaders", "extraHeaders"]
-// );
-
 chrome.webRequest.onSendHeaders.addListener(
-    (details) => {
+    async (details) => {
         const authHeader = details.requestHeaders?.find(
             h => h.name.toLowerCase() === "authorization"
         );
@@ -68,10 +47,13 @@ chrome.webRequest.onSendHeaders.addListener(
                     chrome.storage.local.set({ campaignToken: token });
                     console.log("[LilithDraw] Campaign token captured");
                 }
-
+                const appUidTemp = await chrome.storage.local.get("appUidTemp");
                 if (appUid && appId) {
                     chrome.storage.local.set({ appUid, appId });
-                    console.log("[LilithDraw] appUid:", appUid, "appId:", appId);
+                    if (Object.keys(appUidTemp).length === 0) {
+                        chrome.storage.local.set({ appUidTemp: appUid });
+                    }
+                    console.log("[LilithDraw] appUid:", appUid, "appId:", appId, "appUidTemp:", appUidTemp.appUidTemp);
                 }
             } catch (e) {
                 console.error("[LilithDraw] webRequest error:", e);
@@ -89,13 +71,12 @@ async function autoDraw() {
     const dayUTC = now.getUTCDay(); // 0=Sun, 5=Fri
     if (dayUTC === 5) {
         const token = await getToken();
-        if(token) {
+        if (token) {
             const log = await runDraws();
             chrome.storage.local.set({ drawLog: log });
-        }   
+        }
     }
 }
-
 
 async function openCampaignTab() {
     return new Promise((resolve) => {
@@ -136,11 +117,14 @@ async function waitForFreshToken(timeoutMs = 15000) {
     });
 }
 
-
 async function getRoles(token) {
-    const { cachedCharacters } = await chrome.storage.local.get("cachedCharacters");
-    if (cachedCharacters?.length > 0) {
+    const { appUid, appUidTemp } = await chrome.storage.local.get(["appUid", "appUidTemp"]);
+    const cachedCharacters = await chrome.storage.local.get("cachedCharacters");
+    if (cachedCharacters?.length > 0 && appUid === appUidTemp) {
         return cachedCharacters;
+    }
+    else if (appUid !== appUidTemp) {
+        await chrome.storage.local.set({ cachedCharacters: [], appUidTemp: appUid });
     }
     const res = await fetch("https://plat-campaign-api.lilithgame.com/page/1986696212380155904/user-roles", {
         method: 'GET',
@@ -150,7 +134,11 @@ async function getRoles(token) {
         }
     });
     const json = await res.json();
-    await chrome.storage.local.set({ cachedCharacters: json.data.list });
+    if (json.data.list?.length > 0) {
+        await chrome.storage.local.set({ cachedCharacters: json.data.list, isValidToken: true });
+    } else {
+        await chrome.storage.local.set({ cachedCharacters: [], isValidToken: false });
+    }
     return json.data.list;
 }
 
@@ -180,7 +168,6 @@ async function getManifest(token, role, stored) {
         region: "VNM",
         currency: "VND"
     });
-
     const res = await fetch(
         `https://plat-campaign-api.lilithgame.com/page/1986696212380155904/manifest?${params}`,
         {
@@ -195,7 +182,21 @@ async function getManifest(token, role, stored) {
     return data;
 }
 
-
+async function getTotalDrawsLeft(token, roles, stored) {
+    let total = 0;
+    for (const role of roles) {
+        const manifest = await getManifest(token, role, stored);
+        if (manifest) {
+            const drawCount = manifest?.data?.campaigns?.[0]?.displayModules?.[0]?.components?.[0]?.params?.curDrawTimes;
+            total += drawCount;
+        }
+        else {
+            log.push(`[${role.name}] Failed to get manifest`);
+        }
+    }
+    chrome.storage.local.set({ totalDrawsLeft: total });
+    return total;
+}
 
 async function drawOnce(token, role, stored) {
     const rolePayload = {
@@ -209,7 +210,6 @@ async function drawOnce(token, role, stored) {
         appId: Number(stored.appId),
         appUid: Number(stored.appUid)
     };
-
     // https://plat-campaign-api.lilithgame.com/page/1986696212380155904/trigger?osType=pc&language=vi
     const res = await fetch(
         `${DRAW_API}/page/${PAGE_ID}/trigger`,
@@ -235,35 +235,43 @@ async function drawOnce(token, role, stored) {
 
 async function runDraws(token) {
     const log = [];
-
-    let roles;
+    let roles, totalDrawsLeft;
+    const stored = await chrome.storage.local.get(["appId", "appUid", "roleId"]);
     try {
         roles = await getRoles(token);
+        totalDrawsLeft = await getTotalDrawsLeft(token, roles, stored);
     } catch (e) {
         log.push(`Error fetching roles: ${e.message}`);
         return log;
     }
-
     log.push(`Found ${roles.length} character(s)`);
-
-    const stored = await chrome.storage.local.get(["appId", "appUid", "roleId"]);
-
-    for (const role of roles) {
-        const drawCount = await getManifest(token, role, stored);
-
-        if (drawCount.data.campaigns[0].displayModules[0].components[0].params.curDrawTimes) {
-            try {
-                const result = await drawOnce(token, role, stored);
-                const rewardId = result?.data?.rewardId;
-                const reward = REWARDS[rewardId] || result?.data?.reward || "Unknown";
-                log.push(`[${role.name}] x1 ${reward}`);
-            } catch (e) {
-                log.push(`[${role.name}] Error: ${e.message}`);
-            }
-        }
-        await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+    if (totalDrawsLeft === 0) {
+        log.push("No draws left for any character");
+        return log;
     }
-
+    for (const role of roles) {
+        const manifest = await getManifest(token, role, stored);
+        if (manifest) {
+            const drawCount = manifest?.data?.campaigns?.[0]?.displayModules?.[0]?.components?.[0]?.params?.curDrawTimes;
+            if (drawCount > 0) {
+                try {
+                    const result = await drawOnce(token, role, stored);
+                    const rewardId = result?.data?.rewardId;
+                    const reward = REWARDS[rewardId] || result?.data?.reward || "Unknown";
+                    log.push(`[${role.name}] x1 ${reward}`);
+                } catch (e) {
+                    log.push(`[${role.name}] Error: ${e.message}`);
+                }
+            }
+            else {
+                log.push(`[${role.name}] No draws left`);
+            }
+            await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+        }
+        else {
+            log.push(`[${role.name}] Failed to get manifest`);
+        }
+    }
     log.push("Done!");
     return log;
 }
@@ -283,7 +291,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         })();
         return true;
     }
-
     if (msg.action === "getCharacters") {
         (async () => {
             const token = await getToken();
@@ -291,20 +298,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             try {
                 const roles = await getRoles(token);
                 sendResponse({ roles })
+                getTotalDrawsLeft(token, roles, await chrome.storage.local.get(["appId", "appUid"]));
             } catch (e) {
                 sendResponse({ error: e.message });
             }
         })();
         return true;
     }
-
-    if (msg.action === "getStatus") {
-        chrome.storage.local.get(["scheduleInfo", "drawLog"], (data) => {
-            sendResponse(data);
-        });
-        return true;
-    }
-
     if (msg.action === "getDrawHistory") {
         (async () => {
             const token = await getToken();
@@ -316,7 +316,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     getCharacterById(token, msg.roleId),
                 ]);
                 sendResponse({ history, character });
-                console.log("Draw history response:", history );
+                console.log("Draw history response:", history);
             } catch (e) {
                 sendResponse({ error: e.message });
             }
@@ -352,7 +352,6 @@ async function getDrawHistory(token, characterId, stored) {
         page: 1,
         size: 20
     });
-
     const res = await fetch(
         `https://plat-campaign-api.lilithgame.com/page/1986696212380155904/reward-history?${params}`,
         {
@@ -362,7 +361,6 @@ async function getDrawHistory(token, characterId, stored) {
             }
         }
     );
-
     const data = await res.json();
     return data;
 }

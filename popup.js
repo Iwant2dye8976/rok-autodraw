@@ -1,13 +1,14 @@
-const statusEl  = document.getElementById("status");
+const statusEl = document.getElementById("status");
 const statusDot = document.getElementById("statusDot");
-const logEl     = document.getElementById("log");
-const logWrap   = document.getElementById("logWrap");
-const tokenBox  = document.getElementById("tokenBox");
-const charList  = document.getElementById("charList");
+const logEl = document.getElementById("log");
+const logWrap = document.getElementById("logWrap");
+const tokenBox = document.getElementById("tokenBox");
+const charList = document.getElementById("charList");
+const totalDrawsEl = document.getElementById("drawsRemaining");
 
-function setStatus(text, live = false) {
+function setStatus(text, on = false) {
   statusEl.textContent = text;
-  if (statusDot) statusDot.className = "status-dot" + (live ? " live" : "");
+  if (statusDot) statusDot.className = "status-dot" + (on ? " on" : " off");
 }
 
 function showLog() {
@@ -109,11 +110,15 @@ function showHistory(character, history) {
 }
 
 async function loadCharacters() {
-  const { campaignToken } = await chrome.storage.local.get("campaignToken");
+  const { campaignToken, totalDrawsLeft } = await chrome.storage.local.get(["campaignToken", "totalDrawsLeft"]);
   if (!campaignToken) return;
 
   console.log(campaignToken);
   setCharsLoading();
+
+  if (totalDrawsLeft !== undefined) {
+    totalDrawsEl.textContent = `${totalDrawsLeft} lượt còn lại`;
+  }
 
   try {
     const res = await new Promise((resolve, reject) => {
@@ -157,18 +162,24 @@ async function loadCharacters() {
 
 async function refresh() {
   const data = await chrome.storage.local.get([
-    "campaignToken", "drawLog", "cachedCharacters"
-  ]);
+    "campaignToken", "drawLog", "cachedCharacters", "totalDrawsLeft", "isValidToken"]);
 
   tokenBox.value = data.campaignToken ?? "";
-  if (data.campaignToken) {
+  if (data.isValidToken) {
     setStatus("Token OK", true);
+  }
+  else {
+    setStatus("Token not Valid", false);
   }
 
   if (data.drawLog?.length) {
     showLog();
     logEl.textContent = data.drawLog.join("\n");
     logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  if (data.totalDrawsLeft !== undefined) {
+    totalDrawsEl.textContent = `${data.totalDrawsLeft} lượt còn lại`;
   }
 }
 
@@ -188,7 +199,7 @@ document.getElementById("captureBtn").addEventListener("click", async () => {
     });
   }
   chrome.tabs.reload(tab.id);
-  chrome.tabs.update(tab.id, { active: true , url: "https://www.plutomall.com.vn/rok/vn?tab=perks"});
+  chrome.tabs.update(tab.id, { active: true, url: "https://www.plutomall.com.vn/rok/vn?tab=perks" });
 });
 
 document.getElementById("refreshCharsBtn").addEventListener("click", () => {

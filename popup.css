@@ -115,9 +115,14 @@ body {
     flex-shrink: 0;
 }
 
-.status-dot.live {
+.status-dot.on {
     background: #34c759;
     box-shadow: 0 0 5px #34c75980;
+}
+
+.status-dot.off {
+    background: #ff3b30;
+    box-shadow: 0 0 5px #ff3b3080;
 }
 
 #main {
@@ -143,6 +148,19 @@ body {
     text-transform: uppercase;
     color: var(--ink-40);
     margin-bottom: 10px;
+}
+
+.eyebrow-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.draws-remaining {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--primary);
+    letter-spacing: -0.1px;
 }
 
 .card-body {
