@@ -66,6 +66,33 @@ chrome.webRequest.onSendHeaders.addListener(
     ["requestHeaders", "extraHeaders"]
 );
 
+chrome.runtime.onStartup.addListener(() => {
+    chrome.alarms.get("dailyResetCheck", (alarm) => {
+        if (!alarm) {
+            chrome.alarms.create("dailyResetCheck", { periodInMinutes: 60 });
+        }
+    });
+    runDraws();
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.alarms.get("dailyResetCheck", (alarm) => {
+        if (!alarm) {
+            chrome.alarms.create("dailyResetCheck", { periodInMinutes: 60 });
+            console.log("[LilithDraw] Alarm created");
+        } else {
+            console.log("[LilithDraw] Alarm already exists");
+        }
+    });
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "dailyResetCheck") {
+        autoDraw();
+        chrome.storage.local.set({ lastDrawCheck: new Date().toLocaleString() });
+    }
+});
+
 async function autoDraw() {
     const now = new Date();
     const dayUTC = now.getUTCDay(); // 0=Sun, 5=Fri
@@ -76,6 +103,7 @@ async function autoDraw() {
             chrome.storage.local.set({ drawLog: log });
         }
     }
+    return;
 }
 
 async function openCampaignTab() {
@@ -192,10 +220,10 @@ async function getTotalDrawsLeft(token, roles, stored) {
             total += drawCount;
         }
         else {
-            log.push(`[${role.name}] Failed to get manifest`);
+            log.push(`[${role.name}] Lấy manifest thất bại, bỏ qua nhân vật này`);
         }
     }
-    chrome.storage.local.set({ totalDrawsLeft: total });
+    chrome.storage.local.set({ totalDrawsLeft: total, lastDrawCheck: new Date().toLocaleString() });
     return total;
 }
 
@@ -242,12 +270,12 @@ async function runDraws(token) {
         roles = await getRoles(token);
         totalDrawsLeft = await getTotalDrawsLeft(token, roles, stored);
     } catch (e) {
-        log.push(`Error fetching roles: ${e.message}`);
+        log.push(`Lỗi khi tải thông tin nhân vật: ${e.message}`);
         return log;
     }
-    log.push(`Found ${roles.length} character(s)`);
+    log.push(`Tìm thấy ${roles.length} nhân vật`);
     if (totalDrawsLeft === 0) {
-        log.push("No draws left for any character");
+        log.push("Không còn lượt quay nào cho bất kỳ nhân vật nào");
         return log;
     }
     for (const role of roles) {
@@ -261,16 +289,16 @@ async function runDraws(token) {
                     const reward = REWARDS[rewardId] || result?.data?.reward || "Unknown";
                     log.push(`[${role.name}] x1 ${reward}`);
                 } catch (e) {
-                    log.push(`[${role.name}] Error: ${e.message}`);
+                    log.push(`[${role.name}] Lỗi: ${e.message}`);
                 }
             }
             else {
-                log.push(`[${role.name}] No draws left`);
+                log.push(`[${role.name}] Không còn lượt quay nào`);
             }
             await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
         }
         else {
-            log.push(`[${role.name}] Failed to get manifest`);
+            log.push(`[${role.name}] Lấy manifest thất bại, bỏ qua nhân vật này`);
         }
     }
     log.push("Done!");
@@ -282,20 +310,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         (async () => {
             const campaignToken = await getToken();
             if (!campaignToken) {
-                sendResponse({ error: "No token in storage. Open the campaign page first." });
+                sendResponse({ error: "Không có token trong bộ nhớ. Vui lòng mở trang quay thưởng trước." });
                 return;
             }
-            chrome.storage.local.set({ drawLog: ["Start drawing..."] });
+            chrome.storage.local.set({ drawLog: ["Bắt đầu quay thưởng..."] });
             sendResponse({ ok: true });
             const log = await runDraws(campaignToken);
             chrome.storage.local.set({ drawLog: log });
         })();
         return true;
     }
-    if (msg.action === "getCharacters") {
+    if (msg.action === "refresh") {
         (async () => {
             const token = await getToken();
-            if (!token) { sendResponse({ error: "No token" }); return; }
+            if (!token) { sendResponse({ error: "Không có token" }); return; }
             try {
                 const roles = await getRoles(token);
                 sendResponse({ roles })
@@ -309,7 +337,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.action === "getDrawHistory") {
         (async () => {
             const token = await getToken();
-            if (!token) { sendResponse({ error: "No token" }); return; }
+            if (!token) { sendResponse({ error: "Không có token" }); return; }
             try {
                 const stored = await chrome.storage.local.get(["appId", "appUid"]);
                 const [history, character] = await Promise.all([
@@ -317,7 +345,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     getCharacterById(token, msg.roleId),
                 ]);
                 sendResponse({ history, character });
-                console.log("Draw history response:", history);
+                console.log("Lịch sử quay thưởng:", history);
             } catch (e) {
                 sendResponse({ error: e.message });
             }
@@ -336,7 +364,7 @@ async function getDrawHistory(token, characterId, stored) {
     const character = await getCharacterById(token, characterId);
     // const character = getRoles(campaignToken).then(roles => roles.find(r => String(r.roleId) === String(characterId)));
     if (!character) {
-        throw new Error("Character not found");
+        throw new Error("Không tìm thấy thông tin nhân vật");
     }
     const params = new URLSearchParams({
         language: "vi",

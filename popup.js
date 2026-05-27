@@ -110,19 +110,19 @@ function showHistory(character, history) {
 }
 
 async function loadCharacters() {
-  const { campaignToken, totalDrawsLeft } = await chrome.storage.local.get(["campaignToken", "totalDrawsLeft"]);
+  const { campaignToken, totalDrawsLeft, lastDrawCheck } = await chrome.storage.local.get(["campaignToken", "totalDrawsLeft", "lastDrawCheck"]);
   if (!campaignToken) return;
 
   console.log(campaignToken);
   setCharsLoading();
 
   if (totalDrawsLeft !== undefined) {
-    totalDrawsEl.textContent = `${totalDrawsLeft} lượt còn lại`;
+    totalDrawsEl.textContent = `${totalDrawsLeft} lượt còn lại(${lastDrawCheck || 'Chưa kiểm tra'})`;
   }
 
   try {
     const res = await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ action: "getCharacters" }, (response) => {
+      chrome.runtime.sendMessage({ action: "refresh" }, (response) => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
         } else {
@@ -162,7 +162,8 @@ async function loadCharacters() {
 
 async function refresh() {
   const data = await chrome.storage.local.get([
-    "campaignToken", "drawLog", "cachedCharacters", "totalDrawsLeft", "isValidToken"]);
+    "campaignToken", "drawLog", "cachedCharacters", "totalDrawsLeft", "isValidToken", "lastDrawCheck"
+  ]);
 
   tokenBox.value = data.campaignToken ?? "";
   if (data.isValidToken) {
@@ -179,7 +180,7 @@ async function refresh() {
   }
 
   if (data.totalDrawsLeft !== undefined) {
-    totalDrawsEl.textContent = `${data.totalDrawsLeft} lượt còn lại`;
+    totalDrawsEl.textContent = `${data.totalDrawsLeft} lượt còn lại(${data.lastDrawCheck || 'Chưa kiểm tra'})`;
   }
 }
 
@@ -192,6 +193,8 @@ document.getElementById("captureBtn").addEventListener("click", async () => {
           if (tabId === tab.id && info.status === "complete") {
             chrome.tabs.onUpdated.removeListener(listener);
             console.log("Campaign tab loaded:", tabId);
+            refresh();
+            loadCharacters();
             resolve(tab.id);
           }
         });
@@ -200,6 +203,8 @@ document.getElementById("captureBtn").addEventListener("click", async () => {
   }
   chrome.tabs.reload(tab.id);
   chrome.tabs.update(tab.id, { active: true, url: "https://www.plutomall.com.vn/rok/vn?tab=perks" });
+  refresh();
+  loadCharacters();
 });
 
 document.getElementById("refreshCharsBtn").addEventListener("click", () => {
@@ -228,12 +233,12 @@ document.getElementById("drawNowBtn").addEventListener("click", () => {
       if (data.drawLog?.length > 0) {
         logEl.textContent = data.drawLog.join("\n");
         logEl.scrollTop = logEl.scrollHeight;
-          clearInterval(poll);
-          btn.disabled = false;
-          btn.textContent = "✦ Quay thưởng ngay";
-          setStatus("Token OK", true);
-          refresh();
-          loadCharacters();
+        clearInterval(poll);
+        btn.disabled = false;
+        btn.textContent = "✦ Quay thưởng ngay";
+        setStatus("Token OK", true);
+        refresh();
+        loadCharacters();
       }
     }, 5000);
   });
