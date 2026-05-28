@@ -13,6 +13,7 @@
   ],
   "host_permissions": [
     "https://*.lilithgame.com/*",
+    "https://store.lilith.com/*",
     "https://*.plutomall.com/*",
     "https://*.plutomall.com.vn/*",
     "https://campaign-global.lilith.com/*",

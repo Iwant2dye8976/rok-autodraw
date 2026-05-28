@@ -2,7 +2,9 @@ const BASE = "https://campaign-global.lilith.com";
 const CAMPAIGN_URL = "https://www.plutomall.com.vn/rok/vn?tab=perks";
 const DRAW_API = "https://plat-campaign-api.lilithgame.com"
 const PAGE_ID = "1986696212380155904"; // Không đổi
-const COMPONENT_ID = "1986690045431939073"; // Không đổi
+const COMPONENT_ID = "1986690045431939073";
+const PAGE_ID_LILITH_STORE = "1986695937787461632";
+const COMPONENT_ID_LILITH_STORE = "1986689639322648578";
 const REWARDS = {
     "1986632021321089024": "200 Đá Quý",
     "1986631915360387072": "Tăng tốc 3 giờ",
@@ -33,6 +35,16 @@ chrome.webRequest.onSendHeaders.addListener(
         const authHeader = details.requestHeaders?.find(
             h => h.name.toLowerCase() === "authorization"
         );
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        console.log("[LilithDraw] Outgoing request to:", details.url, "from tab:", tab?.url);
+        if (tab?.url?.includes("plutomall.com")) {
+            await chrome.storage.local.set({ currentMall: "plutomall", currentPageId: PAGE_ID, currentComponentId: COMPONENT_ID });
+            // console.log("[LilithDraw] Request from Plutomall detected:", details.url);
+        }
+        else if (tab?.url?.includes("store.lilith.com")) {
+            await chrome.storage.local.set({ currentMall: "lilithstore", currentPageId: PAGE_ID_LILITH_STORE, currentComponentId: COMPONENT_ID_LILITH_STORE });
+            // console.log("[LilithDraw] Request from Store detected:", details.url);
+        }
 
         if (authHeader?.value) {
             const token = authHeader.value;
@@ -44,8 +56,14 @@ chrome.webRequest.onSendHeaders.addListener(
                 const payload = JSON.parse(atob(token.replace('Bearer ', '').split('.')[1]));
 
                 if (payload.client_id === 'event_lglo') {
-                    chrome.storage.local.set({ campaignToken: token });
+                    await chrome.storage.local.set({ campaignToken: token });
                     console.log("[LilithDraw] Campaign token captured");
+                    try {
+                        await chrome.action.openPopup();
+                    } catch (e) {
+                        // openPopup() chỉ hoạt động khi Chrome window đang focused
+                        console.log("[LilithDraw] Could not reopen popup:", e.message);
+                    }
                 }
                 const appUidTemp = await chrome.storage.local.get("appUidTemp");
                 if (appUid && appId) {
@@ -53,7 +71,7 @@ chrome.webRequest.onSendHeaders.addListener(
                     if (Object.keys(appUidTemp).length === 0) {
                         chrome.storage.local.set({ appUidTemp: appUid });
                     }
-                    console.log("[LilithDraw] appUid:", appUid, "appId:", appId, "appUidTemp:", appUidTemp.appUidTemp);
+                    console.log("[LilithDraw] appUid:", appUid, "appId:", appId, "appUidTemp:", appUidTemp.appUidTemp, "currentMall:", (await chrome.storage.local.get("currentMall")).currentMall, "currentPageId:", (await chrome.storage.local.get("currentPageId")).currentPageId, "currentComponentId:", (await chrome.storage.local.get("currentComponentId")).currentComponentId);
                 }
             } catch (e) {
                 console.error("[LilithDraw] webRequest error:", e);
@@ -128,9 +146,9 @@ async function closeCampaignTab(tabId) {
     });
 }
 
-async function waitForFreshToken(timeoutMs = 15000) {
-    const start = Date.now();
+function waitForToken(timeoutMs = 20000) {
     return new Promise((resolve, reject) => {
+        const start = Date.now();
         const interval = setInterval(async () => {
             const { campaignToken, tokenTimestamp } = await chrome.storage.local.get(["campaignToken", "tokenTimestamp"]);
             if (campaignToken && tokenTimestamp && tokenTimestamp > start) {
@@ -139,7 +157,7 @@ async function waitForFreshToken(timeoutMs = 15000) {
             }
             if (Date.now() - start > timeoutMs) {
                 clearInterval(interval);
-                resolve(campaignToken || null);
+                reject(new Error("Timeout — không capture được token"));
             }
         }, 500);
     });
@@ -154,7 +172,8 @@ async function getRoles(token) {
     else if (appUid !== appUidTemp) {
         await chrome.storage.local.set({ cachedCharacters: [], appUidTemp: appUid });
     }
-    const res = await fetch("https://plat-campaign-api.lilithgame.com/page/1986696212380155904/user-roles", {
+    const id = await chrome.storage.local.get("currentPageId");
+    const res = await fetch(`https://plat-campaign-api.lilithgame.com/page/${id.currentPageId}/user-roles`, {
         method: 'GET',
         headers: {
             "authorization": token,
@@ -197,8 +216,9 @@ async function getManifest(token, role, stored) {
         region: "VNM",
         currency: "VND"
     });
+    const id = await chrome.storage.local.get("currentPageId");
     const res = await fetch(
-        `https://plat-campaign-api.lilithgame.com/page/1986696212380155904/manifest?${params}`,
+        `https://plat-campaign-api.lilithgame.com/page/${id.currentPageId}/manifest?${params}`,
         {
             headers: {
                 "accept": "application/json",
@@ -240,8 +260,9 @@ async function drawOnce(token, role, stored) {
         appUid: Number(stored.appUid)
     };
     // https://plat-campaign-api.lilithgame.com/page/1986696212380155904/trigger?osType=pc&language=vi
+    const id = await chrome.storage.local.get(["currentPageId", "currentComponentId"]);
     const res = await fetch(
-        `${DRAW_API}/page/${PAGE_ID}/trigger`,
+        `${DRAW_API}/page/${id.currentPageId}/trigger`,
         {
             method: "POST",
             headers: {
@@ -252,7 +273,7 @@ async function drawOnce(token, role, stored) {
             body: JSON.stringify({
                 language: "en",
                 role: rolePayload,
-                componentId: COMPONENT_ID,
+                componentId: id.currentComponentId,
                 action: "drawing",
                 params: {}
             })
@@ -325,9 +346,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             const token = await getToken();
             if (!token) { sendResponse({ error: "Không có token" }); return; }
             try {
+                const stored = await chrome.storage.local.get(["appId", "appUid"]);
                 const roles = await getRoles(token);
-                sendResponse({ roles })
-                getTotalDrawsLeft(token, roles, await chrome.storage.local.get(["appId", "appUid"]));
+                const totalDrawsLeft = await getTotalDrawsLeft(token, roles, stored);
+                sendResponse({ roles, totalDrawsLeft });
             } catch (e) {
                 sendResponse({ error: e.message });
             }
@@ -379,10 +401,11 @@ async function getDrawHistory(token, characterId, stored) {
         appId: Number(stored.appId),
         appUid: Number(stored.appUid),
         page: 1,
-        size: 20
+        size: 20,
     });
+    const id = await chrome.storage.local.get("currentPageId");
     const res = await fetch(
-        `https://plat-campaign-api.lilithgame.com/page/1986696212380155904/reward-history?${params}`,
+        `https://plat-campaign-api.lilithgame.com/page/${id.currentPageId}/reward-history?${params}`,
         {
             headers: {
                 "accept": "application/json",

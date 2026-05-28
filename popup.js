@@ -20,14 +20,11 @@ function showMain() {
   const detailView = document.getElementById("detailView");
   if (detailView) detailView.remove();
   document.getElementById("main").style.display = "";
-  refresh();
-  loadCharacters();
+  // refresh();
+  // loadCharacters();
 }
 
 function renderChars(roles) {
-  const charList =
-    document.getElementById("charList");
-
   charList.innerHTML = "";
 
   for (const role of roles) {
@@ -115,11 +112,6 @@ async function loadCharacters() {
 
   console.log(campaignToken);
   setCharsLoading();
-
-  if (totalDrawsLeft !== undefined) {
-    totalDrawsEl.textContent = `${totalDrawsLeft} lượt còn lại(${lastDrawCheck || 'Chưa kiểm tra'})`;
-  }
-
   try {
     const res = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({ action: "refresh" }, (response) => {
@@ -130,6 +122,12 @@ async function loadCharacters() {
         }
       });
     });
+
+    if (res?.error) { /* ... */ return; }
+
+    if (res.totalDrawsLeft !== undefined) {
+      totalDrawsEl.textContent = `${res.totalDrawsLeft} lượt còn lại`;
+    }
 
     if (res?.error) {
       charList.innerHTML = `
@@ -148,7 +146,7 @@ async function loadCharacters() {
           ? res.roles
           : [];
     renderChars(characters);
-    await chrome.storage.local.set({ cachedCharacters: characters });
+    // await chrome.storage.local.set({ cachedCharacters: characters });
 
   } catch (err) {
     console.error("Failed to load characters:", err);
@@ -185,26 +183,50 @@ async function refresh() {
 }
 
 document.getElementById("captureBtn").addEventListener("click", async () => {
-  const [tab] = await chrome.tabs.query({ url: "*://www.plutomall.com.vn/rok/vn*" });
-  if (!tab?.url?.includes("plutomall.com.vn/rok/vn")) {
-    return new Promise((resolve) => {
-      chrome.tabs.create({ url: "https://www.plutomall.com.vn/rok/vn?tab=perks", active: true }, (tab) => {
-        chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-          if (tabId === tab.id && info.status === "complete") {
-            chrome.tabs.onUpdated.removeListener(listener);
-            console.log("Campaign tab loaded:", tabId);
-            refresh();
-            loadCharacters();
-            resolve(tab.id);
-          }
-        });
+  const mall = document.querySelector('input[name="store"]:checked').value;
+  const urls = {
+    plutomall: "https://www.plutomall.com.vn/rok/vn?tab=perks",
+    lilithstore: "https://store.lilith.com/rok?tab=perks"
+  };
+  const patterns = {
+    plutomall: "*://www.plutomall.com.vn/rok/vn*",
+    lilithstore: "*://store.lilith.com/*"
+  };
+  const targetUrl = urls[mall];
+  const pattern = patterns[mall];
+  const [tab] = await chrome.tabs.query({ url: pattern });
+  if (!tab) {
+    chrome.tabs.create({ url: targetUrl, active: true }, (newTab) => {
+      chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
+        if (tabId === newTab.id && info.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(listener);
+          waitForToken()
+            .then(() => {
+              refresh();
+              loadCharacters();
+            })
+            .catch((err) => {
+              setStatus(err.message);
+            });
+        }
       });
     });
+    return;
   }
-  chrome.tabs.reload(tab.id);
-  chrome.tabs.update(tab.id, { active: true, url: "https://www.plutomall.com.vn/rok/vn?tab=perks" });
-  refresh();
-  loadCharacters();
+  chrome.tabs.update(tab.id, { active: true, url: targetUrl });
+  chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
+    if (tabId === tab.id && info.status === "complete") {
+      chrome.tabs.onUpdated.removeListener(listener);
+      waitForToken()
+        .then(() => {
+          refresh();
+          loadCharacters();
+        })
+        .catch((err) => {
+          setStatus(err.message);
+        });
+    }
+  });
 });
 
 document.getElementById("refreshCharsBtn").addEventListener("click", () => {
