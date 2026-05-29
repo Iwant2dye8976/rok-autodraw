@@ -45,7 +45,6 @@ chrome.webRequest.onSendHeaders.addListener(
             await chrome.storage.local.set({ currentMall: "lilithstore", currentPageId: PAGE_ID_LILITH_STORE, currentComponentId: COMPONENT_ID_LILITH_STORE });
             // console.log("[LilithDraw] Request from Store detected:", details.url);
         }
-
         if (authHeader?.value) {
             const token = authHeader.value;
             try {
@@ -61,7 +60,6 @@ chrome.webRequest.onSendHeaders.addListener(
                     try {
                         await chrome.action.openPopup();
                     } catch (e) {
-                        // openPopup() chỉ hoạt động khi Chrome window đang focused
                         console.log("[LilithDraw] Could not reopen popup:", e.message);
                     }
                 }
@@ -104,9 +102,9 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
+chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === "dailyResetCheck") {
-        autoDraw();
+        await autoDraw();
         chrome.storage.local.set({ lastDrawCheck: new Date().toLocaleString() });
     }
 });
@@ -146,23 +144,6 @@ async function closeCampaignTab(tabId) {
     });
 }
 
-function waitForToken(timeoutMs = 20000) {
-    return new Promise((resolve, reject) => {
-        const start = Date.now();
-        const interval = setInterval(async () => {
-            const { campaignToken, tokenTimestamp } = await chrome.storage.local.get(["campaignToken", "tokenTimestamp"]);
-            if (campaignToken && tokenTimestamp && tokenTimestamp > start) {
-                clearInterval(interval);
-                resolve(campaignToken);
-            }
-            if (Date.now() - start > timeoutMs) {
-                clearInterval(interval);
-                reject(new Error("Timeout — không capture được token"));
-            }
-        }, 500);
-    });
-}
-
 async function getRoles(token) {
     const { appUid, appUidTemp } = await chrome.storage.local.get(["appUid", "appUidTemp"]);
     const cachedCharacters = await chrome.storage.local.get("cachedCharacters");
@@ -181,9 +162,11 @@ async function getRoles(token) {
         }
     });
     const json = await res.json();
-    if (json.data.list?.length > 0) {
-        await chrome.storage.local.set({ cachedCharacters: json.data.list, isValidToken: true });
-    } else {
+    console.log("Get roles - Valid token:", res.ok, "Response:", json);
+    if (res.ok) {
+        await chrome.storage.local.set({ cachedCharacters: json.data.list ?? [], isValidToken: true });
+    }
+    else {
         await chrome.storage.local.set({ cachedCharacters: [], isValidToken: false });
     }
     return json.data.list;
@@ -348,8 +331,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             try {
                 const stored = await chrome.storage.local.get(["appId", "appUid"]);
                 const roles = await getRoles(token);
+                const isValidToken = await chrome.storage.local.get("isValidToken");
                 const totalDrawsLeft = await getTotalDrawsLeft(token, roles, stored);
-                sendResponse({ roles, totalDrawsLeft });
+                console.log("Token valid:", isValidToken);
+                sendResponse({ roles, totalDrawsLeft, isValidToken });
             } catch (e) {
                 sendResponse({ error: e.message });
             }

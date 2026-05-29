@@ -6,6 +6,24 @@ const tokenBox = document.getElementById("tokenBox");
 const charList = document.getElementById("charList");
 const totalDrawsEl = document.getElementById("drawsRemaining");
 
+
+function waitForToken(timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const interval = setInterval(async () => {
+      const { campaignToken, tokenTimestamp } = await chrome.storage.local.get(["campaignToken", "tokenTimestamp"]);
+      if (campaignToken && tokenTimestamp && tokenTimestamp > start) {
+        clearInterval(interval);
+        resolve(campaignToken);
+      }
+      if (Date.now() - start > timeoutMs) {
+        clearInterval(interval);
+        reject(new Error("Timeout — không capture được token"));
+      }
+    }, 500);
+  });
+}
+
 function setStatus(text, on = false) {
   statusEl.textContent = text;
   if (statusDot) statusDot.className = "status-dot" + (on ? " on" : " off");
@@ -107,7 +125,7 @@ function showHistory(character, history) {
 }
 
 async function loadCharacters() {
-  const { campaignToken, totalDrawsLeft, lastDrawCheck } = await chrome.storage.local.get(["campaignToken", "totalDrawsLeft", "lastDrawCheck"]);
+  const { campaignToken } = await chrome.storage.local.get(["campaignToken"]);
   if (!campaignToken) return;
 
   console.log(campaignToken);
@@ -125,8 +143,17 @@ async function loadCharacters() {
 
     if (res?.error) { /* ... */ return; }
 
+    tokenBox.value = campaignToken ?? "";
+    if (res.isValidToken) {
+      setStatus("Token OK", true);
+    }
+    else {
+      setStatus("Token not Valid", false);
+    }
+
     if (res.totalDrawsLeft !== undefined) {
-      totalDrawsEl.textContent = `${res.totalDrawsLeft} lượt còn lại`;
+      const data = await chrome.storage.local.get("lastDrawCheck");
+      totalDrawsEl.textContent = `${res.totalDrawsLeft} lượt còn lại(${data.lastDrawCheck || 'Chưa kiểm tra'})`;
     }
 
     if (res?.error) {
@@ -162,14 +189,6 @@ async function refresh() {
   const data = await chrome.storage.local.get([
     "campaignToken", "drawLog", "cachedCharacters", "totalDrawsLeft", "isValidToken", "lastDrawCheck"
   ]);
-
-  tokenBox.value = data.campaignToken ?? "";
-  if (data.isValidToken) {
-    setStatus("Token OK", true);
-  }
-  else {
-    setStatus("Token not Valid", false);
-  }
 
   if (data.drawLog?.length) {
     showLog();
