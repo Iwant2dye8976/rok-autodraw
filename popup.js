@@ -173,8 +173,6 @@ async function loadCharacters() {
           ? res.roles
           : [];
     renderChars(characters);
-    // await chrome.storage.local.set({ cachedCharacters: characters });
-
   } catch (err) {
     console.error("Failed to load characters:", err);
     charList.innerHTML = `

@@ -14,6 +14,7 @@ const REWARDS = {
     "1986631409741234176": "Tăng tốc 24 giờ",
     "1986631205541543936": "2.000 Đá Quý"
 };
+
 async function getToken() {
     const data = await chrome.storage.local.get(["campaignToken", "iframeSrc"]);
     if (data.campaignToken) return data.campaignToken;
@@ -39,11 +40,9 @@ chrome.webRequest.onSendHeaders.addListener(
         console.log("[LilithDraw] Outgoing request to:", details.url, "from tab:", tab?.url);
         if (tab?.url?.includes("plutomall.com")) {
             await chrome.storage.local.set({ currentMall: "plutomall", currentPageId: PAGE_ID, currentComponentId: COMPONENT_ID });
-            // console.log("[LilithDraw] Request from Plutomall detected:", details.url);
         }
         else if (tab?.url?.includes("store.lilith.com")) {
             await chrome.storage.local.set({ currentMall: "lilithstore", currentPageId: PAGE_ID_LILITH_STORE, currentComponentId: COMPONENT_ID_LILITH_STORE });
-            // console.log("[LilithDraw] Request from Store detected:", details.url);
         }
         if (authHeader?.value) {
             const token = authHeader.value;
@@ -51,23 +50,24 @@ chrome.webRequest.onSendHeaders.addListener(
                 const urlObj = new URL(details.url);
                 const appUid = urlObj.searchParams.get('appUid');
                 const appId = urlObj.searchParams.get('appId');
-
                 const payload = JSON.parse(atob(token.replace('Bearer ', '').split('.')[1]));
-
                 if (payload.client_id === 'event_lglo') {
                     await chrome.storage.local.set({ campaignToken: token });
                     console.log("[LilithDraw] Campaign token captured");
-                    try {
-                        await chrome.action.openPopup();
-                    } catch (e) {
-                        console.log("[LilithDraw] Could not reopen popup:", e.message);
-                    }
                 }
                 const appUidTemp = await chrome.storage.local.get("appUidTemp");
                 if (appUid && appId) {
                     chrome.storage.local.set({ appUid, appId });
                     if (Object.keys(appUidTemp).length === 0) {
-                        chrome.storage.local.set({ appUidTemp: appUid });
+                        chrome.storage.local.set({ appUidTemp: appUid, status: "ready" });
+                    }
+                    try {
+                        if ((await chrome.storage.local.get("status")).status === "ready") {
+                            await chrome.action.openPopup();
+                        }
+                    }
+                    catch (e) {
+                        console.warn("[LilithDraw] Could not open popup:", e.message);
                     }
                     console.log("[LilithDraw] appUid:", appUid, "appId:", appId, "appUidTemp:", appUidTemp.appUidTemp, "currentMall:", (await chrome.storage.local.get("currentMall")).currentMall, "currentPageId:", (await chrome.storage.local.get("currentPageId")).currentPageId, "currentComponentId:", (await chrome.storage.local.get("currentComponentId")).currentComponentId);
                 }
@@ -82,13 +82,16 @@ chrome.webRequest.onSendHeaders.addListener(
     ["requestHeaders", "extraHeaders"]
 );
 
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
     chrome.alarms.get("dailyResetCheck", (alarm) => {
         if (!alarm) {
             chrome.alarms.create("dailyResetCheck", { periodInMinutes: 60 });
         }
     });
-    runDraws();
+    const token = await getToken();
+    if (token) {
+        await autoDraw();
+    }
 });
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -104,7 +107,10 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === "dailyResetCheck") {
-        await autoDraw();
+        const token = await getToken();
+        if (token) {
+            await autoDraw();
+        }
         chrome.storage.local.set({ lastDrawCheck: new Date().toLocaleString() });
     }
 });
@@ -115,7 +121,13 @@ async function autoDraw() {
     if (dayUTC === 5) {
         const token = await getToken();
         if (token) {
-            const log = await runDraws();
+            // const totalDrawsLeft = await getTotalDrawsLeft(token, await getRoles(token), await chrome.storage.local.get(["appId", "appUid"]));
+            // if (totalDrawsLeft === 0) {
+            //     console.log("No draws left, skipping auto-draw");
+            //     return;
+            // }
+            const log = await runDraws(token);
+            chrome.storage.local.set({ status: "drawing" });
             chrome.storage.local.set({ drawLog: log });
         }
     }
