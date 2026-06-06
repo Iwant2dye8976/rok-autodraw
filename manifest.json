@@ -9,7 +9,8 @@
     "activeTab",
     "webRequest",
     "webRequestAuthProvider",
-    "alarms"
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://*.lilithgame.com/*",
@@ -41,28 +42,12 @@
         "https://plat-campaign-api.lilithgame.com/*",
         "https://campaign-global.lilith.com/*",
         "https://www.plutomall.com.vn/*",
-        "https://*.lilithgame.com/*"
+        "https://*.lilithgame.com/*",
+        "https://q.lilithgame.com/*"
       ],
       "js": [
         "content.js"
-      ],
-      "run_at": "document_start",
-      "world": "MAIN",
-      "all_frames": true
-    },
-    {
-      "matches": [
-        "https://plat-campaign-api.lilithgame.com/*",
-        "https://campaign-global.lilith.com/*",
-        "https://www.plutomall.com.vn/*",
-        "https://*.lilithgame.com/*"
-      ],
-      "js": [
-        "content-bridge.js"
-      ],
-      "run_at": "document_start",
-      "world": "ISOLATED",
-      "all_frames": true
+      ]
     }
   ]
 }

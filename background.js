@@ -82,6 +82,10 @@ chrome.webRequest.onSendHeaders.addListener(
     ["requestHeaders", "extraHeaders"]
 );
 
+// chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+
+// });
+
 chrome.runtime.onStartup.addListener(async () => {
     chrome.alarms.get("dailyResetCheck", (alarm) => {
         if (!alarm) {
@@ -321,6 +325,47 @@ async function runDraws(token) {
     return log;
 }
 
+function formatDate(date) {
+    return date.getFullYear() + "-" +
+        String(date.getMonth() + 1).padStart(2, "0") + "-" +
+        String(date.getDate()).padStart(2, "0") + " " +
+        String(date.getHours()).padStart(2, "0") + ":" +
+        String(date.getMinutes()).padStart(2, "0") + ":" +
+        String(date.getSeconds()).padStart(2, "0");
+}
+
+async function autoSurvey(csrf, params) {
+    const surveyMinutes = 3;
+    const end = new Date();
+    const start = new Date(end.getTime() - surveyMinutes * 60 * 1000);
+    const startTime = formatDate(start);
+    const endTime = formatDate(end);
+    const response = await fetch(
+        `https://q.lilithgame.com/api/answer/collect?_csrf=${csrf}`,
+        {
+            method: "POST",
+            headers: {
+                "content-type": "application/json;charset=UTF-8"
+            },
+            body: JSON.stringify({
+                survey_id: params.sid,
+                start_time: startTime,
+                end_time: endTime,
+                pages: [],
+                region: params.region,
+                role_key: params.role_key,
+                sign: params.sign,
+                lang: params.lang,
+                source: params.source
+            })
+        }
+    );
+    console.log("Status:", response.status);
+    const json = await response.json();
+    console.log(json);
+    return json;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.action === "drawNow") {
         (async () => {
@@ -370,6 +415,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             }
         })();
         return true;
+    }
+
+    if (msg.type === 'surveyCsrf') {
+        (async () => {
+            const json =await autoSurvey(msg.csrf, msg.params);
+            chrome.notifications.create({
+                type: "basic",
+                iconUrl: "images/icons/icon48.png",
+                title: "Auto Survey",
+                message: `Message: ${json.msg}, Code: ${json.ret}`,
+                requireInteraction: false
+            });
+            // console.log("[LilithDraw] Survey CSRF token captured:", msg.csrf);
+        })();
+
     }
 });
 
