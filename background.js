@@ -68,6 +68,12 @@ async function getToken(mall) {
     return data.token ?? null;
 }
 
+function detectMallFromUrl(url) {
+    for (const [mall, config] of Object.entries(STORE_CONFIG)) {
+        if (url.includes(config.pageId)) return mall;
+    }
+    return null;
+}
 
 chrome.webRequest.onSendHeaders.addListener(
     async (details) => {
@@ -75,18 +81,19 @@ chrome.webRequest.onSendHeaders.addListener(
             h => h.name.toLowerCase() === "authorization"
         );
 
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        let detectedMall = null;
-        if (tab?.url?.includes("plutomall.com")) {
-            detectedMall = "plutomall";
-        } else if (tab?.url?.includes("store.lilith.com")) {
-            detectedMall = "lilithstore";
-        }
-        if (detectedMall) {
-            await chrome.storage.local.set({ currentMall: detectedMall });
+        let mall = detectMallFromUrl(details.url);
+
+        if (!mall) {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab?.url?.includes("plutomall.com")) {
+                mall = "plutomall";
+            } else if (tab?.url?.includes("store.lilith.com")) {
+                mall = "lilithstore";
+            }
+            if (mall) await chrome.storage.local.set({ currentMall: mall });
         }
 
-        const mall = detectedMall ?? await getCurrentMall();
+        if (!mall) mall = await getCurrentMall();
 
         if (authHeader?.value) {
             const token = authHeader.value;
@@ -97,10 +104,7 @@ chrome.webRequest.onSendHeaders.addListener(
 
                 const payload = JSON.parse(atob(token.replace("Bearer ", "").split(".")[1]));
                 if (payload.client_id === "event_lglo") {
-                    await setStoreData(mall, {
-                        token,
-                        tokenTimestamp: Date.now()
-                    });
+                    await setStoreData(mall, { token, tokenTimestamp: Date.now() });
                     await chrome.storage.local.set({ tokenTimestamp: Date.now() });
                     console.log(`[LilithDraw][${mall}] Campaign token captured`);
                 }
@@ -109,8 +113,8 @@ chrome.webRequest.onSendHeaders.addListener(
                     await setStoreData(mall, { appUid, appId });
                     console.log(`[LilithDraw][${mall}] appUid: ${appUid}, appId: ${appId}`);
                     try {
-                        const { status } = await chrome.storage.local.get("status");
-                        if (status === "ready") await chrome.action.openPopup();
+                        // const { status } = await chrome.storage.local.get("status");
+                        await chrome.action.openPopup();
                     } catch (e) {
                         console.warn("[LilithDraw] Could not open popup:", e.message);
                     }
@@ -129,9 +133,7 @@ chrome.runtime.onStartup.addListener(async () => {
     chrome.alarms.get("dailyResetCheck", (alarm) => {
         if (!alarm) chrome.alarms.create("dailyResetCheck", { periodInMinutes: 60 });
     });
-    const mall = await getCurrentMall();
-    const token = await getToken(mall);
-    if (token) await autoDraw(mall);
+    await autoDrawAllMalls();
 });
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -145,22 +147,38 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === "dailyResetCheck") {
-        const mall = await getCurrentMall();
-        const token = await getToken(mall);
-        if (token) await autoDraw(mall);
-        await setStoreData(mall, { lastCheck: new Date().toLocaleString() });
+        await autoDrawAllMalls();
     }
 });
 
+async function autoDrawAllMalls() {
+    for (const mall of Object.keys(STORE_CONFIG)) {
+        await autoDrawMall(mall);
+        chrome.storage.local.set({ mall, lastcheck: new Date().toLocaleString() });
+    }
+}
 
-async function autoDraw(mall) {
-    const now = new Date();
-    if (now.getUTCDay() !== 5) return;
+async function autoDrawMall(mall) {
     const token = await getToken(mall);
     if (!token) return;
-    chrome.storage.local.set({ status: "drawing" });
-    const log = await runDraws(token, mall);
-    chrome.storage.local.set({ drawLog: log });
+    if (new Date().getUTCDay() !== 5) {
+        try {
+            const roles = await getRoles(token, mall, true);
+            const totalDrawsLeft = await getTotalDrawsLeft(token, roles, mall);
+            if (totalDrawsLeft > 0) {
+                chrome.storage.local.set({ status: "drawing" });
+                const log = await runDraws(token, mall);
+                chrome.storage.local.set({ drawLog: log });
+            }
+            else return;
+        } catch (e) {
+            console.error(`[LilithDraw][${mall}] autoDrawMall error:`, e);
+        }
+    }
+    else {
+        const log = await runDraws(token, mall);
+        chrome.storage.local.set({ drawLog: log });
+    }
 }
 
 
